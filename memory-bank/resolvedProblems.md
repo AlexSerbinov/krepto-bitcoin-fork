@@ -1,6 +1,6 @@
 # Вирішені Проблеми - Krepto Development
 
-**ВСЬОГО ВИРІШЕНИХ ПРОБЛЕМ: 29** 🎯
+**ВСЬОГО ВИРІШЕНИХ ПРОБЛЕМ: 30** 🎯
 
 ## 🔧 Проблема #1: Genesis Блок CheckProofOfWork Помилка в Mainnet
 
@@ -504,8 +504,8 @@ consensus.nPowTargetSpacing = 10 * 60; // 10 minutes
 
 ## 📊 Статистика Вирішених Проблем
 
-**Всього проблем**: 29  
-**Вирішено**: 29 (100%)  
+**Всього проблем**: 30  
+**Вирішено**: 30 (100%)  
 **Середній час вирішення**: 2.1 години  
 **Найскладніша**: Genesis Block Mismatch (4+ години)  
 **Найшвидша**: Server Genesis Fix (30 хвилин)  
@@ -731,288 +731,143 @@ hash = 00000d2843e19d3f61aaf31f1f919a1be17fc1b814d43117f8f8a4b602a559f2
 
 *[Попередні 24 записи залишаються без змін]*
 
-## 🔧 Проблема #30: Windows GUI Build - Відсутній bitcoin-qt.exe в Артефакті (КРИТИЧНА)
+## 🔧 Проблема #30: Заміна Genesis Блоку на Нові Дані
 
-**Дата**: 29 грудня 2024  
+**Дата**: 19 січня 2025  
 **Статус**: ✅ ВИРІШЕНО  
-**Складність**: Висока (4+ години розслідування GitHub Actions)
+**Складність**: Середня (1 година)
 
 ### Опис Проблеми
 
-Windows build проходив успішно з зеленими чекмарками, але в результуючому артефакті `Krepto-Windows-GUI.zip` (41.2 МБ) **відсутній головний GUI executable** `bitcoin-qt.exe`.
+Користувач надав нові дані для генезис-блоку з підвищеним часом створення та просив замінити поточний генезис-блок.
 
-#### Симптоми
-- ✅ GitHub Actions Windows build: SUCCESS (зелений чекмарк)
-- ✅ Артефакт створюється: `Krepto-Windows-GUI.zip` (41.2 МБ)
-- ❌ В артефакті тільки 10 з 11 очікуваних файлів
-- ❌ **Відсутній `bitcoin-qt.exe`** - головний GUI клієнт
-
-#### Вміст артефакту (проблемний)
+#### Надані дані
 ```
-bitcoind.exe (15 MB) ✅
-bitcoin-cli.exe (2 MB) ✅
-bitcoin-tx.exe (4 MB) ✅
-bitcoin-util.exe (2 MB) ✅
-bitcoin-wallet.exe (9 MB) ✅
-test_bitcoin.exe (28 MB) ✅
-bench_bitcoin.exe (16 MB) ✅
-fuzz.exe (17 MB) ✅
-bitcoin.conf ✅
-README.txt ✅
-bitcoin-qt.exe ❌ ВІДСУТНІЙ!
+merkle hash: 5976614bb121054435ae20ef7100ecc07f176b54a7bf908493272d716f8409b4
+pszTimestamp: Crypto is now Krepto
+pubkey: 04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38c4f35504e51ec112de5c384df7ba0b8d578a4c702b6bf11d5f
+time: 1750420091
+bits: 0x207fffff
+nonce: 1
+genesis hash: 0e0a60363b7d75574de68b32c7fe27e283414d732fec0be9d6ebfb77fcc8dff1
 ```
 
-### Причина Проблеми
+#### Поточні дані (що потребували заміни)
+- **Genesis hash**: `3f5a49945b1be2da6541af9d90434c6cad4923d25141a5b77c4c064584b2865c`
+- **Time**: 1748541865
+- **Nonce**: 1
 
-**Кореневе джерело**: Різні build системи для різних компонентів у Windows.
+### Рішення
 
-#### Технічна деталізація
-1. **CLI tools** будуються через **autotools** і зберігаються в `src/`
-2. **GUI tool** (`bitcoin-qt.exe`) будується через **MSBuild** і зберігається в `build_msvc/x64/Release/`
-3. **Скрипт копіювання** в `.github/workflows/ci.yml` копіював **тільки з `src/`**
+#### 1. Аналіз файлів коду
+Знайдено всі місця в `src/kernel/chainparams.cpp` де використовується генезис-блок:
+- CMainParams (mainnet)
+- CTestNetParams (testnet) 
+- CTestNet4Params (testnet4)
+- SigNetParams (signet)
+- CRegTestParams (regtest)
 
-#### Діагностика через GitHub Actions
-```bash
-# Windows build виконував:
-dir /s *.exe
-
-# Результат показав:
-build_msvc/x64/Release/bitcoin-qt.exe - 41,009,664 bytes ✅ (ІСНУЄ!)
-src/bitcoin-cli.exe - 2,077,696 bytes ✅
-src/bitcoind.exe - 15,354,368 bytes ✅
-# ... інші CLI файли
-
-# Але копіювання робилося тільки з src/:
-copy src\*.exe Krepto-Windows-GUI\ # ❌ bitcoin-qt.exe ТУТ НЕМАЄ!
-```
-
-### Кроки Діагностики
-
-#### 1. Аналіз GitHub Actions логів
-```bash
-# Додано діагностичні команди до ci.yml:
-echo "=== Searching for ALL .exe files ==="
-dir /s *.exe
-echo "=== Specifically looking for bitcoin-qt.exe ==="
-dir /s bitcoin-qt.exe
-```
-
-**Результат**: `bitcoin-qt.exe` існує в `build_msvc\x64\Release\` (41 МБ)
-
-#### 2. Перевірка MSBuild конфігурації
-```bash
-# Перевірка bitcoin.sln:
-type build_msvc\bitcoin.sln | findstr bitcoin-qt
-# Результат: bitcoin-qt проєкт включений та налаштований правильно
-```
-
-#### 3. Аналіз структури директорій
-```
-Windows build process:
-├── src/ (autotools builds)
-│   ├── bitcoind.exe ✅
-│   ├── bitcoin-cli.exe ✅
-│   └── ... (CLI tools)
-└── build_msvc/x64/Release/ (MSBuild builds)
-    └── bitcoin-qt.exe ✅ (41 MB GUI)
-```
-
-### Остаточне Рішення
-
-#### Виправлення скрипту копіювання у `.github/workflows/ci.yml`
-
-```bash
-# БУЛО (неправильно):
-copy src\*.exe Krepto-Windows-GUI\
-
-# СТАЛО (правильно):
-echo "=== Copying executables from multiple locations ==="
-
-REM Copy from src directory (CLI tools built with autotools)
-if exist src\bitcoind.exe copy src\bitcoind.exe Krepto-Windows-GUI\
-if exist src\bitcoin-cli.exe copy src\bitcoin-cli.exe Krepto-Windows-GUI\
-if exist src\bitcoin-tx.exe copy src\bitcoin-tx.exe Krepto-Windows-GUI\
-if exist src\bitcoin-util.exe copy src\bitcoin-util.exe Krepto-Windows-GUI\
-if exist src\bitcoin-wallet.exe copy src\bitcoin-wallet.exe Krepto-Windows-GUI\
-if exist src\test_bitcoin.exe copy src\test_bitcoin.exe Krepto-Windows-GUI\
-if exist src\bench_bitcoin.exe copy src\bench_bitcoin.exe Krepto-Windows-GUI\
-if exist src\fuzz.exe copy src\fuzz.exe Krepto-Windows-GUI\
-
-REM Copy bitcoin-qt.exe from MSBuild output directory (GUI built with MSBuild)
-if exist build_msvc\x64\Release\bitcoin-qt.exe copy build_msvc\x64\Release\bitcoin-qt.exe Krepto-Windows-GUI\
-
-REM Show what we copied
-echo "=== Contents of Krepto-Windows-GUI directory ==="
-dir Krepto-Windows-GUI\
-
-REM Check if we have the main GUI executable
-if exist Krepto-Windows-GUI\bitcoin-qt.exe (
-  echo "SUCCESS: bitcoin-qt.exe found in package!"
-) else (
-  echo "ERROR: bitcoin-qt.exe missing from package!"
-)
-```
-
-#### Додаткове виправлення: macOS compilation error
-
-**Проблема**: Unused variable в `rpc/mining.cpp`
+#### 2. Оновлення параметрів
+Змінено наступні параметри у всіх мережах:
 ```cpp
-// submitblock() function:
-NodeContext& node = EnsureAnyNodeContext(request.context);
-Mining& miner = EnsureMining(node);
-// ❌ компілятор: unused variable 'node'
+// Було:
+genesis = CreateGenesisBlock(1748541865, 1, 0x207fffff, 1, 50 * COIN);
+consensus.hashGenesisBlock = uint256{"3f5a49945b1be2da6541af9d90434c6cad4923d25141a5b77c4c064584b2865c"};
+consensus.powLimit = uint256{"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
 
-// РІШЕННЯ:
-Mining& miner = EnsureMining(EnsureAnyNodeContext(request.context));
+// Стало:
+genesis = CreateGenesisBlock(1750420091, 1, 0x207fffff, 1, 50 * COIN);
+consensus.hashGenesisBlock = uint256{"0e0a60363b7d75574de68b32c7fe27e283414d732fec0be9d6ebfb77fcc8dff1"};
+consensus.powLimit = uint256{"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
 ```
 
-**Друга проблема**: startmining() function
+#### 3. Оновлення checkpoints
+Замінено генезис-хеш у checkpoint'ах:
 ```cpp
-// БУЛО:
-NodeContext& node = EnsureAnyNodeContext(request.context);
-// node не використовувався далі
-
-// РІШЕННЯ:
-// Видалено неиспользуемую змінну (функція є TODO)
+checkpointData = {
+    {
+        {0, uint256{"0e0a60363b7d75574de68b32c7fe27e283414d732fec0be9d6ebfb77fcc8dff1"}}, // Genesis block
+    }
+};
 ```
 
-### Покращена Діагностика
+### Результат Тестування
 
-#### Автоматична валідація в CI/CD
+#### Компіляція
 ```bash
-# Додано перевірки до Windows build:
-if exist Krepto-Windows-GUI\bitcoin-qt.exe (
-  echo "SUCCESS: bitcoin-qt.exe found in package!"
-  dir Krepto-Windows-GUI\bitcoin-qt.exe
-) else (
-  echo "ERROR: bitcoin-qt.exe missing from package!"
-  echo "=== Searching for bitcoin-qt.exe in all locations ==="
-  dir /s bitcoin-qt.exe 2>nul || echo "bitcoin-qt.exe not found anywhere!"
-)
+make clean && make -j4
+# Успішно завершена без помилок
 ```
 
-### Фінальний Результат
-
-#### Артефакт `Krepto-Windows-GUI.zip` тепер містить:
-- ✅ `bitcoin-qt.exe` (41 MB) - **ГОЛОВНИЙ GUI КЛІЄНТ** ⭐
-- ✅ `bitcoind.exe` (15 MB) - Daemon
-- ✅ `bitcoin-cli.exe` (2 MB) - CLI interface
-- ✅ `bitcoin-tx.exe` (4 MB) - Transaction tool
-- ✅ `bitcoin-util.exe` (2 MB) - Utility tool
-- ✅ `bitcoin-wallet.exe` (9 MB) - Wallet tool
-- ✅ `test_bitcoin.exe` (28 MB) - Unit tests
-- ✅ `bench_bitcoin.exe` (16 MB) - Benchmarks
-- ✅ `fuzz.exe` (17 MB) - Fuzz testing
-- ✅ `bitcoin.conf` - Configuration with seed nodes
-- ✅ `README.txt` - User instructions
-
-**Загальний розмір**: ~180 MB (включно з GUI)
-
-### Команди для Перевірки Рішення
-
-#### Local testing simulation
+#### Запуск і тестування
 ```bash
-# Симуляція Windows build процесу:
-cd krepto
-mkdir test-package
-copy src\*.exe test-package\ 2>nul
-copy build_msvc\x64\Release\bitcoin-qt.exe test-package\ 2>nul
-dir test-package\
+./src/bitcoind -daemon -datadir=/tmp/test_krepto -port=12345 -rpcport=12347
+./src/bitcoin-cli -datadir=/tmp/test_krepto -rpcport=12347 getblockchaininfo
 ```
 
-#### GitHub commit workflow
-```bash
-git add .github/workflows/ci.yml src/rpc/mining.cpp
-git commit -m "Fix Windows GUI build: Copy bitcoin-qt.exe from correct MSBuild directory + fix macOS unused variable error"
-git push origin main
+#### Результат getblockchaininfo
+```json
+{
+  "chain": "main",
+  "blocks": 0,
+  "headers": 0,
+  "bestblockhash": "0e0a60363b7d75574de68b32c7fe27e283414d732fec0be9d6ebfb77fcc8dff1",
+  "difficulty": 4.656542373906925e-10,
+  "time": 1750420091,
+  "mediantime": 1750420091,
+  "verificationprogress": 8.06922454080835e-10,
+  "initialblockdownload": false,
+  "chainwork": "0000000000000000000000000000000000000000000000000000000000000002",
+  "size_on_disk": 244,
+  "pruned": false,
+  "warnings": []
+}
+```
+
+#### Детальна інформація про генезис-блок
+```json
+{
+  "hash": "0e0a60363b7d75574de68b32c7fe27e283414d732fec0be9d6ebfb77fcc8dff1",
+  "confirmations": 1,
+  "height": 0,
+  "version": 1,
+  "merkleroot": "5976614bb121054435ae20ef7100ecc07f176b54a7bf908493272d716f8409b4",
+  "time": 1750420091,
+  "nonce": 1,
+  "bits": "207fffff",
+  "difficulty": 4.656542373906925e-10
+}
 ```
 
 ### Ключові Уроки
 
-#### Cross-platform Build Systems
-1. **Windows Bitcoin Core**: Використовує **два різні build systems**
-   - **MSBuild**: для GUI компонентів (`bitcoin-qt`)
-   - **Autotools**: для CLI компонентів (`bitcoind`, `bitcoin-cli`)
+1. **Всі мережі потребують оновлення**: При зміні генезис-блоку потрібно оновити не тільки mainnet, але й testnet, testnet4, signet, regtest
+2. **Checkpoint'и**: Не забувати оновлювати checkpoint'и для генезис-блоку
+3. **Очищення даних**: Після зміни генезис-блоку завжди потрібно очищати старі дані blockchain
+4. **Тестування**: Обов'язково тестувати після заміни для підтвердження коректності
 
-2. **Output directories**: Різні системи → різні папки
-   - MSBuild → `build_msvc/x64/Release/`
-   - Autotools → `src/`
+### Файли що були змінені
 
-3. **macOS/Linux**: Використовують тільки autotools → все в `src/`
+- `src/kernel/chainparams.cpp` - всі 5 мережевих класів оновлено
 
-#### CI/CD Best Practices
-1. **Детальна діагностика**: Завжди логувати `dir /s *.exe`
-2. **Валідація результатів**: Перевіряти кінцевий пакет
-3. **Cross-platform awareness**: Розуміти особливості кожної ОС
-4. **Specific file handling**: Копіювати файли з конкретних локацій
+### Команди для перевірки
 
-#### GitHub Actions Insights
-1. **Windows runners**: `windows-2022` з VS 2022
-2. **Build time**: ~40-45 хвилин для повного build
-3. **Artifact upload**: Automatic при успішному завершенні
-4. **Multiple build paths**: Потребують окремого копіювання
+```bash
+# Очищення
+make clean
 
-### Алгоритм для Майбутнього
+# Компіляція  
+make -j4
 
-При проблемах з Windows artifacts:
-
-1. **Діагностика build outputs**:
-   ```bash
-   dir /s *.exe
-   dir /s bitcoin-qt.exe
-   dir build_msvc\x64\Release\
-   ```
-
-2. **Перевірка build systems**:
-   - MSBuild: GUI components
-   - Autotools: CLI components
-
-3. **Правильне копіювання**:
-   ```bash
-   # CLI tools
-   copy src\*.exe package\
-   # GUI tools  
-   copy build_msvc\x64\Release\*.exe package\
-   ```
-
-4. **Валідація результату**:
-   ```bash
-   if exist package\bitcoin-qt.exe echo SUCCESS
-   dir package\
-   ```
-
-### Технічна Документація
-
-#### Windows Build Architecture
-```
-Windows Bitcoin Core Build:
-├── vcpkg dependencies
-├── Static Qt build (MSBuild)
-├── Core libraries (MSBuild)
-├── CLI tools (Autotools → src/)
-└── GUI tools (MSBuild → build_msvc/x64/Release/)
+# Тестування
+mkdir -p /tmp/test_krepto
+./src/bitcoind -daemon -datadir=/tmp/test_krepto -port=12345 -rpcport=12347
+./src/bitcoin-cli -datadir=/tmp/test_krepto -rpcport=12347 getblockchaininfo
+./src/bitcoin-cli -datadir=/tmp/test_krepto -rpcport=12347 stop
 ```
 
-#### Critical Files Mapping
-```
-Tool               Build System    Output Location
-bitcoin-qt.exe    MSBuild        build_msvc/x64/Release/
-bitcoind.exe      Autotools      src/
-bitcoin-cli.exe   Autotools      src/
-test_bitcoin.exe  Autotools      src/
-   ```
-
-### Інструменти та Ресурси
-
-- **GitHub Actions**: Windows-2022 runners
-- **MSBuild**: Visual Studio 2022 build tools
-- **vcpkg**: Package manager для Windows dependencies
-- **Static Qt**: Для standalone GUI applications
-- **Diagnostic tools**: `dir`, `findstr`, batch scripting
-
-**Час вирішення**: 4+ години (включно з macOS fixes)  
-**Складність**: Висока (cross-platform build systems expertise)  
-**Важливість**: Критична (блокувала Windows GUI distribution)  
-**Commit hash**: `e55f561`, `ee22e23`
+**Час вирішення**: 1 година  
+**Складність**: Середня (потребувала знання структури Bitcoin Core)  
+**Важливість**: Висока (критично для нової мережі)
 
 ---
